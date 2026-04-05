@@ -13,7 +13,7 @@ jobs:
       ACCOUNTS: ${{ secrets.ACCOUNTS }}
       PUSH_API_KEY: ${{ secrets.PUSH_API_KEY }}
       # 从仓库变量中读取 API URL（必须配置）
-      PUSH_API_URL: ${{ vars.PUSH_API_URL }}
+      PUSH_API_URL: ${{ secrets.PUSH_API_URL }}
 
     steps:
       - uses: actions/checkout@v6
