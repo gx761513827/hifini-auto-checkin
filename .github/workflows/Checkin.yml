@@ -3,6 +3,7 @@ name: HIFITI-Auto-Checkin
 on:
   workflow_dispatch:
   schedule:
+    # UTC 时间，对应北京时间次日 07:20
     - cron: "20 23 * * *"
 
 jobs:
@@ -12,7 +13,6 @@ jobs:
     env:
       ACCOUNTS: ${{ secrets.ACCOUNTS }}
       PUSH_API_KEY: ${{ secrets.PUSH_API_KEY }}
-      # 从仓库变量中读取 API URL（必须配置）
       PUSH_API_URL: ${{ secrets.PUSH_API_URL }}
 
     steps:
@@ -34,14 +34,21 @@ jobs:
         env:
           RESULT: ${{ steps.checkin.outputs.result }}
         run: |
-          ESCAPED_MSG=$(printf '%s' "$RESULT" | jq -sRr @json)
+          # 使用 printf 生成带真实换行符的 content（\n 会被解释为换行）
+          CONTENT=$(printf "HIFINI 自动签到\n\n%s\n\n任务详情：https://github.com/%s/actions/runs/%s" \
+            "$RESULT" \
+            "${{ github.repository }}" \
+            "${{ github.run_id }}")
+          
+          # 用 jq 构造 JSON，--arg 会自动对特殊字符进行 JSON 转义
           JSON_PAYLOAD=$(jq -n \
-            --arg content "HIFINI 自动签到\n\n$ESCAPED_MSG\n\n任务详情：https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg content "$CONTENT" \
             '{
               "msgType": "TEXT",
               "toAll": true,
               "content": $content
             }')
+          
           curl -X POST "${{ env.PUSH_API_URL }}" \
             -H "X-API-Key: ${{ env.PUSH_API_KEY }}" \
             -H "Content-Type: application/json" \
@@ -50,4 +57,4 @@ jobs:
       - name: 警告：未配置推送信息
         if: ${{ always() && ( !env.PUSH_API_KEY || !env.PUSH_API_URL ) }}
         run: |
-          echo "⚠️ 未配置企业微信推送，请设置 PUSH_API_KEY (Secrets) 和 PUSH_API_URL (Variables)"
+          echo "⚠️ 未配置企业微信推送，请在 Secrets 中设置 PUSH_API_KEY 和 PUSH_API_URL"
