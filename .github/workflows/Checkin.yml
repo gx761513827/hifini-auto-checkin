@@ -3,7 +3,6 @@ name: HIFITI-Auto-Checkin
 on:
   workflow_dispatch:
   schedule:
-    # UTC
     - cron: "20 23 * * *"
 
 jobs:
@@ -12,8 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ACCOUNTS: ${{ secrets.ACCOUNTS }}
-      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-      TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
+      PUSH_API_KEY: ${{ secrets.PUSH_API_KEY }}
+      # 从仓库变量中读取 API URL（必须配置）
+      PUSH_API_URL: ${{ vars.PUSH_API_URL }}
 
     steps:
       - uses: actions/checkout@v6
@@ -29,16 +29,25 @@ jobs:
         run: |
           node main.js
 
-      - name: Notify
-        if: ${{ always() && env.TELEGRAM_TOKEN && env.TELEGRAM_TO }}
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_TO }}
-          token: ${{ secrets.TELEGRAM_TOKEN }}
-          format: markdown
-          message: |
-            *HIFINI 自动签到*
+      - name: 企业微信应用通知（通过第三方 API）
+        if: ${{ always() && env.PUSH_API_KEY && env.PUSH_API_URL }}
+        env:
+          RESULT: ${{ steps.checkin.outputs.result }}
+        run: |
+          ESCAPED_MSG=$(printf '%s' "$RESULT" | jq -sRr @json)
+          JSON_PAYLOAD=$(jq -n \
+            --arg content "HIFINI 自动签到\n\n$ESCAPED_MSG\n\n任务详情：https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{
+              "msgType": "TEXT",
+              "toAll": true,
+              "content": $content
+            }')
+          curl -X POST "${{ env.PUSH_API_URL }}" \
+            -H "X-API-Key: ${{ env.PUSH_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD"
 
-            ${{ steps.checkin.outputs.result  }}
-
-            [任务详情](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+      - name: 警告：未配置推送信息
+        if: ${{ always() && ( !env.PUSH_API_KEY || !env.PUSH_API_URL ) }}
+        run: |
+          echo "⚠️ 未配置企业微信推送，请设置 PUSH_API_KEY (Secrets) 和 PUSH_API_URL (Variables)"
